@@ -21,15 +21,17 @@ public:
         return static_cast<SizeType>(mElements.size());
     }
     void insert(Key &&key, T &&value) {
+        ++mGlobalUsageCounter;
+        auto helper = Helper(std::forward<T>(value), mGlobalUsageCounter);
         if (auto it = mElements.find(key);
                 it != mElements.end()) {
-            it->second.reset(std::forward<T>(value));
+            it->second.reset(std::move(helper));
             return;
         }
         if (static_cast<SizeType>(mElements.size()) == MaxSize) {
             removeUselessElement();
         }
-        mElements.emplace(std::forward<Key>(key), Helper(std::forward<T>(value)));
+        mElements.emplace(std::forward<Key>(key), std::move(helper));
     }
     T &value(const Key &key) {
         if (auto it = mElements.find(key);
@@ -53,15 +55,17 @@ private:
         mElements.erase(it);
     }
     struct Helper {
-        explicit Helper(T &&val) : value(std::forward<T>(val)) {}
+        Helper(T &&val, SizeType usaged)
+            : value(std::forward<T>(val)),
+              lastUsageCounter(usaged) {}
         T value;
-        void reset(T &&val) {
+        void reset(Helper &&helper) {
             usageCounter = 0;
-            lastUsageCounter = 0;
-            value = std::forward<T>(val);
+            lastUsageCounter = helper.lastUsageCounter;
+            value = std::forward<T>(helper.value);
         }
         SizeType usageCounter{0};
-        SizeType lastUsageCounter{0}; // or time
+        SizeType lastUsageCounter{0};
         bool operator<(const Helper &other) {
             if (usageCounter == other.usageCounter) {
                 return lastUsageCounter < other.lastUsageCounter;

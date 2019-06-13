@@ -12,7 +12,7 @@ TEST(LimitedBufferTest, BufferCreationTest) {
     EXPECT_THAT(buffer.maxSize(), Eq(100u));
 }
 
-TEST(LimitedBufferTest, BufferSimpleInsertionAndAccessTest) {
+TEST(LimitedBufferTest, BufferSingleInsertionAndAccessTest) {
     LimitedBuffer<int, int, 1> buffer;
     buffer.insert(1, 1);
     EXPECT_THAT(buffer.maxSize(), Eq(1u));
@@ -43,9 +43,6 @@ TEST(LimitedBufferTest, BufferLessFreqValueTest) {
     buffer.value(2);
     buffer.insert(5, 15);
     EXPECT_THROW(buffer.value(4), std::out_of_range);
-    buffer.insert(1, 12);
-    buffer.insert(6, 62);
-    EXPECT_THROW(buffer.value(1), std::out_of_range);
 }
 
 TEST(LimitedBufferTest, BufferOldValueTest) {
@@ -57,6 +54,17 @@ TEST(LimitedBufferTest, BufferOldValueTest) {
     buffer.insert(4, 14);
     buffer.insert(5, 15);
     EXPECT_THROW(buffer.value(1), std::out_of_range);
+}
+
+TEST(LimitedBufferTest, BufferOldValueTest2) {
+    LimitedBuffer<int, int, 3> buffer;
+    EXPECT_THAT(buffer.size(), Eq(0u));
+    ASSERT_THAT(buffer.maxSize(), Eq(3u));
+    buffer.insert(4, 14);
+    buffer.insert(2, 13);
+    buffer.insert(1, 12);
+    buffer.insert(5, 15);
+    EXPECT_THROW(buffer.value(4), std::out_of_range);
 }
 
 TEST(LimitedBufferTest, SomeUsageTest) {
