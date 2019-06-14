@@ -2,7 +2,7 @@
 #define LIMITED_BUFFER_H
 
 #include <map>
-#include <algorithm>
+#include <set>
 
 namespace custom_containers {
 
@@ -20,61 +20,85 @@ public:
     SizeType size() const noexcept {
         return static_cast<SizeType>(mElements.size());
     }
-    void insert(Key &&key, T &&value) {
+    void insert(const Key &key, T &&value) {
         ++mGlobalUsageCounter;
-        auto helper = Helper(std::forward<T>(value), mGlobalUsageCounter);
-        if (auto it = mElements.find(key);
-                it != mElements.end()) {
-            it->second.reset(std::move(helper));
+        auto helper = Helper(key, std::forward<T>(value), 0, mGlobalUsageCounter);
+        if (removeHelper(key)) {
+            insertHelper(std::move(helper));
             return;
         }
         if (static_cast<SizeType>(mElements.size()) == MaxSize) {
             removeUselessElement();
         }
-        mElements.emplace(std::forward<Key>(key), std::move(helper));
+        insertHelper(std::move(helper));
     }
-    T &value(const Key &key) {
+    const T &value(const Key &key) {
         if (auto it = mElements.find(key);
                 it != mElements.end()) {
-            ++(it->second.usageCounter);
             ++mGlobalUsageCounter;
-            it->second.lastUsageCounter = mGlobalUsageCounter;
+            auto helper = Helper(key, it->second->value, it->second->usageCounter + 1, mGlobalUsageCounter);
+            if (removeHelper(it)) {
+                insertHelper(std::move(helper));
+            }
         }
-        return mElements.at(key).value;
+        return mElements.at(key)->value;
     }
-    void clear() {
+    void clear() noexcept {
         mElements.clear();
+        mHelpers.clear();
         mGlobalUsageCounter = 0;
     }
 private:
-    void removeUselessElement() {
-        const auto it = std::min_element(mElements.cbegin(), mElements.cend(),
-                                   [](auto firstElem, auto secondElem) {
-           return firstElem.second < secondElem.second;
-        });
-        mElements.erase(it);
-    }
-    struct Helper {
-        Helper(T &&val, SizeType usaged)
-            : value(std::forward<T>(val)),
-              lastUsageCounter(usaged) {}
-        T value;
-        void reset(Helper &&helper) {
-            usageCounter = 0;
-            lastUsageCounter = helper.lastUsageCounter;
-            value = std::forward<T>(helper.value);
-        }
-        SizeType usageCounter{0};
-        SizeType lastUsageCounter{0};
-        bool operator<(const Helper &other) {
+    struct Helper
+    {
+        Helper(const Key &k, T &&val, SizeType usageCounter, SizeType lastCounter)
+            : key(k),
+              value(std::forward<T>(val)),
+              usageCounter(usageCounter),
+              lastUsageCounter(lastCounter) {}
+        Helper(const Key &k, const T &val, SizeType usageCounter, SizeType lastCounter)
+            : key(k),
+              value(val),
+              usageCounter(usageCounter),
+              lastUsageCounter(lastCounter) {}
+        bool operator<(const Helper &other) const {
             if (usageCounter == other.usageCounter) {
                 return lastUsageCounter < other.lastUsageCounter;
             }
             return usageCounter < other.usageCounter;
         }
+        Key key;
+        T value;
+        SizeType usageCounter;
+        SizeType lastUsageCounter;
     };
-    std::map<Key, Helper> mElements;
+private:
+    std::set<Helper> mHelpers;
+    std::map<Key, typename std::set<Helper>::iterator> mElements;
     SizeType mGlobalUsageCounter{0};
+private:
+    void insertHelper(Helper &&helper) noexcept {
+        auto emplacedHelper = mHelpers.emplace(std::move(helper));
+        if (emplacedHelper.second) {
+            mElements.emplace(emplacedHelper.first->key, emplacedHelper.first);
+        }
+    }
+    bool removeHelper(typename decltype(mElements)::iterator it) {
+        mHelpers.erase(it->second);
+        mElements.erase(it);
+        return true;
+    }
+    bool removeHelper(const Key &key) {
+        auto it = mElements.find(key);
+        if (it == mElements.end()) {
+            return false;
+        }
+        return removeHelper(it);
+    }
+    void removeUselessElement() {
+        mElements.erase(mHelpers.begin()->key);
+        mHelpers.erase(mHelpers.begin());
+    }
 };
 
 } // namespace custom_containers
